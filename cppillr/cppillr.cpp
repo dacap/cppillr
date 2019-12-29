@@ -24,10 +24,12 @@
 enum PPKeyword {
   #define PP_KEYWORD(x) pp_key_##x,
   #include "keywords.h"
+  MaxPPKeyword
 };
 enum Keyword {
   #define KEYWORD(x) key_##x,
   #include "keywords.h"
+  MaxKeyword
 };
 std::unordered_map<std::string, PPKeyword> pp_keywords;
 std::unordered_map<std::string, Keyword> keywords;
@@ -882,6 +884,28 @@ int count_lines(const LexData& data)
 }
 
 //////////////////////////////////////////////////////////////////////
+// KeywordStats
+
+class KeywordStats {
+  std::array<size_t, MaxKeyword> keywords;
+public:
+  KeywordStats() { keywords.fill(0); }
+
+  void add(const LexData& data) {
+    for (auto& tok : data.tokens) {
+      if (tok.kind == TokenKind::Keyword)
+        ++keywords[tok.i];
+    }
+  }
+
+  void print() {
+    for (int i=0; i<int(MaxKeyword); ++i) {
+      std::printf("\t%s\t%d\n", keywords_id[i].c_str(), keywords[i]);
+    }
+  }
+};
+
+//////////////////////////////////////////////////////////////////////
 // main
 
 struct Options {
@@ -892,6 +916,7 @@ struct Options {
   bool show_includes = false;
   bool count_tokens = false;
   bool count_lines = false;
+  bool keyword_stats = false;
 };
 
 bool parse_options(int argc, char* argv[], Options& options)
@@ -926,6 +951,9 @@ bool parse_options(int argc, char* argv[], Options& options)
     }
     else if (std::strcmp(argv[i], "-countlines") == 0) {
       options.count_lines = true;
+    }
+    else if (std::strcmp(argv[i], "-keywordstats") == 0) {
+      options.keyword_stats = true;
     }
     else if (std::strcmp(argv[i], "-threads") == 0) {
       ++i;
@@ -986,18 +1014,25 @@ void run_with_options(const Options& options)
     t.watch("parse files");
   int total_tokens = 0;
   int total_lines = 0;
+  KeywordStats keyword_stats;
   for (auto& data : lex_data) {
     if (options.show_tokens) show_tokens(data);
     if (options.show_includes) show_includes(data);
     if (options.count_lines) total_lines += count_lines(data);
+    if (options.keyword_stats) keyword_stats.add(data);
     total_tokens += data.tokens.size();
   }
+  if (options.show_time)
+    t.watch("iterate data");
+
   if (options.count_tokens)
     printf("total tokens %d\n", total_tokens);
   if (options.count_lines)
     printf("total lines %d\n", total_lines);
-  if (options.show_time)
-    t.watch("iterate data");
+  if (options.keyword_stats) {
+    t.watch("keyword stats:");
+    keyword_stats.print();
+  }
 }
 
 void create_keyword_tables()
