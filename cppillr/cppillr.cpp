@@ -900,7 +900,8 @@ public:
 
   void print() {
     for (int i=0; i<int(MaxKeyword); ++i) {
-      std::printf("\t%s\t%d\n", keywords_id[i].c_str(), keywords[i]);
+      if (keywords[i] > 0)
+        std::printf("%d\t%s\n", keywords[i], keywords_id[i].c_str());
     }
   }
 };
@@ -1034,7 +1035,6 @@ void run_with_options(const Options& options)
     for (auto& data : lex_data)
       keyword_stats.add(data);
 
-    std::printf("keyword stats\n");
     keyword_stats.print();
   }
 
