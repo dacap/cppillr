@@ -1012,26 +1012,40 @@ void run_with_options(const Options& options)
 
   if (options.show_time)
     t.watch("parse files");
-  int total_tokens = 0;
-  int total_lines = 0;
-  KeywordStats keyword_stats;
-  for (auto& data : lex_data) {
-    if (options.show_tokens) show_tokens(data);
-    if (options.show_includes) show_includes(data);
-    if (options.count_lines) total_lines += count_lines(data);
-    if (options.keyword_stats) keyword_stats.add(data);
-    total_tokens += data.tokens.size();
-  }
-  if (options.show_time)
-    t.watch("iterate data");
 
-  if (options.count_tokens)
-    printf("total tokens %d\n", total_tokens);
-  if (options.count_lines)
-    printf("total lines %d\n", total_lines);
+  if (options.count_tokens) {
+    int total_tokens = 0;
+    for (auto& data : lex_data)
+      total_tokens += data.tokens.size();
+
+    std::printf("total tokens %d\n", total_tokens);
+  }
+
+  if (options.count_lines) {
+    int total_lines = 0;
+    for (auto& data : lex_data)
+      total_lines += count_lines(data);
+
+    std::printf("total lines %d\n", total_lines);
+  }
+
   if (options.keyword_stats) {
-    t.watch("keyword stats:");
+    KeywordStats keyword_stats;
+    for (auto& data : lex_data)
+      keyword_stats.add(data);
+
+    std::printf("keyword stats\n");
     keyword_stats.print();
+  }
+
+  if (options.show_tokens) {
+    for (auto& data : lex_data)
+      show_tokens(data);
+  }
+
+  if (options.show_includes) {
+    for (auto& data : lex_data)
+      show_includes(data);
   }
 }
 
