@@ -535,8 +535,18 @@ Lexer::Action Lexer::process()
           tok_id.push_back(chr);
           break;
         default:
-          error("unexpected char '%c' after #include", chr);
-          return Action::ProcessChr;
+          // It can be an ID (e.g. #include __SOMETHING__)
+          if ((chr >= 'a' && chr <= 'z') ||
+              (chr >= 'A' && chr <= 'Z') ||
+              (chr >= '_')) {
+            state = LexState::ReadingIdentifier;
+            tok_id.push_back(chr);
+          }
+          else {
+            error("unexpected char '%c' after #include", chr);
+            return Action::ProcessChr;
+          }
+          break;
       }
       break;
     case LexState::ReadingSysHeaderName:
