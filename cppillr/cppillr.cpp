@@ -1,4 +1,4 @@
-// Copyright (C) 2019  David Capello
+// Copyright (C) 2019-2020  David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
@@ -40,6 +40,7 @@ enum class TokenKind {
   PPKeyword,
   PPHeaderName,
   PPEnd,
+  Comment,
   Identifier,
   Keyword,
   CharConstant,
@@ -98,6 +99,7 @@ enum class LexState {
 struct LexData {
   std::string fn;
   std::vector<uint8_t> ids;
+  std::vector<uint8_t> comments;
   std::vector<Token> tokens;
   int readed_bytes;
 
@@ -181,6 +183,29 @@ private:
     tok_id.clear();
   }
 
+  void add_token_comment() {
+    // trim(tok_id);
+    if (!tok_id.empty()) {
+      data.comments.insert(data.comments.end(),
+                           (uint8_t*)&tok_id[0],
+                           (uint8_t*)&tok_id[0]+tok_id.size());
+
+      // Merge comments
+      if (!data.tokens.empty() &&
+          data.tokens.back().kind == TokenKind::Comment) {
+        data.tokens.back().j = data.comments.size();
+      }
+      else {
+        data.add_token(TokenKind::Comment,
+                       reader.pos(),
+                       data.comments.size()-tok_id.size(),
+                       data.comments.size());
+      }
+
+      tok_id.clear();
+    }
+  }
+
   template<typename ...Args>
   void error(Args&& ...args) {
     char buf[1024];
@@ -192,12 +217,27 @@ private:
                 buf);
   }
 
+  void trim(std::string& s) {
+    int i=0;
+    for (; i<int(s.size()) && isspace(s[i]); ++i)
+      ;
+    s.erase(s.begin(), s.begin()+i);
+
+    if (!s.empty()) {
+      i=s.size()-1;
+      for (; i>=0 && isspace(s[i]); --i)
+        ;
+      s.erase(s.begin()+i, s.end());
+    }
+  }
+
   LexState state;
   LexData data;
   CharReader reader;
   int chr;     // Current char from input being processed
   bool prepro; // True if we are reading preprocessor tokens.
   std::string tok_id;
+  bool keep_comments = true;
 };
 
 Lexer::Result Lexer::lex(const std::string& fn)
@@ -498,26 +538,30 @@ Lexer::Action Lexer::process()
       break;
     case LexState::ReadingLineComment:
       if (chr == '\n') {
+        if (keep_comments) {
+          tok_id.push_back(chr);
+          add_token_comment();
+        }
         state = LexState::ReadingWhitespace;
       }
-      else {
-        // Ignore comments
-        // TODO add comment info if it's required (e.g. to generate docs)
-        // if (keep_comments { ... }
+      else if (keep_comments) {
+        tok_id.push_back(chr);
       }
       break;
     case LexState::ReadingMultilineComment:
       if (chr == '*') {
         chr = reader.nextchar();
         if (chr == '/') {
+          if (keep_comments)
+            add_token_comment();
           state = LexState::ReadingWhitespace;
         }
-        else {
-          // Ignore comments
+        else if (keep_comments) {
+          tok_id.push_back(chr);
         }
       }
-      else {
-        // Ignore comments
+      else if (keep_comments) {
+        tok_id.push_back(chr);
       }
       break;
     case LexState::ReadingBeforeHeaderName:
@@ -825,6 +869,12 @@ void show_tokens(const LexData& data)
         break;
       case TokenKind::PPEnd:
         std::printf("} PP\n");
+        break;
+      case TokenKind::Comment:
+        std::printf("COMMENT ");
+        for (int i=tok.i; i<tok.j; ++i)
+          std::putc(data.comments[i], stdout);
+        std::putc('\n', stdout);
         break;
       case TokenKind::Identifier:
         std::printf("ID ");
