@@ -1175,8 +1175,6 @@ void create_keyword_tables()
   #define PP_KEYWORD(x)           \
     pp_keywords[#x] = pp_key_##x; \
     pp_keywords_id.push_back(#x);
-  #include "keywords.h"
-
   #define KEYWORD(x)          \
     keywords[#x] = key_##x;   \
     keywords_id.push_back(#x);
