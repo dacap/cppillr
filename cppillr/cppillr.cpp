@@ -914,19 +914,79 @@ void show_tokens(const LexData& data)
   }
 }
 
+struct PPIf {
+  std::string id;
+  bool def;
+};
+
 void show_includes(const LexData& data)
 {
+  std::vector<PPIf> stack;
+
   std::printf("%s: includes\n",
               data.fn.c_str());
 
   for (int i=0; i+2<int(data.tokens.size()); ++i) {
     if (data.tokens[i].kind == TokenKind::PPBegin &&
-        data.tokens[i+1].kind == TokenKind::PPKeyword &&
-        data.tokens[i+1].i == pp_key_include &&
-        data.tokens[i+2].kind == TokenKind::PPHeaderName) {
-      std::string str(data.ids.begin()+data.tokens[i+2].i,
-                      data.ids.begin()+data.tokens[i+2].j);
-      std::printf("  %s\n", str.c_str());
+        data.tokens[i+1].kind == TokenKind::PPKeyword) {
+      if (data.tokens[i+1].i == pp_key_if ||
+          data.tokens[i+1].i == pp_key_ifdef ||
+          data.tokens[i+1].i == pp_key_ifndef) {
+        PPIf ppif;
+        switch (data.tokens[i+1].i) {
+          case pp_key_if: {
+            bool first = false;
+            ppif.id = "#if (";
+            for (i+=2; i<int(data.tokens.size()) &&
+                   data.tokens[i].kind != TokenKind::PPEnd; ++i) {
+              if (data.tokens[i].kind == TokenKind::Identifier ||
+                  data.tokens[i].kind == TokenKind::Literal) {
+                std::string lit(data.ids.begin()+data.tokens[i].i,
+                                data.ids.begin()+data.tokens[i].j);
+                if (first)
+                  first = false;
+                else
+                  ppif.id.push_back(' ');
+                ppif.id += lit;
+              }
+            }
+            ppif.id += ")";
+            ppif.def = true;
+            break;
+          }
+          case pp_key_ifndef:
+          case pp_key_ifdef: {
+            std::string id(data.ids.begin()+data.tokens[i+2].i,
+                           data.ids.begin()+data.tokens[i+2].j);
+            ppif.id = id;
+            ppif.def = (data.tokens[i+1].i == pp_key_ifdef);
+            break;
+          }
+        }
+        stack.push_back(ppif);
+      }
+      else if (data.tokens[i+1].i == pp_key_endif) {
+        if (!stack.empty())
+          stack.erase(--stack.end());
+      }
+      else if (data.tokens[i+1].i == pp_key_include &&
+               data.tokens[i+2].kind == TokenKind::PPHeaderName) {
+        std::string str(data.ids.begin()+data.tokens[i+2].i,
+                        data.ids.begin()+data.tokens[i+2].j);
+        std::printf("  %s", str.c_str());
+        if (!stack.empty()) {
+          std::printf(" (");
+          for (int i=0; i<int(stack.size()); ++i) {
+            if (i > 0)
+              std::printf(" && ");
+            std::printf("%s%s",
+                        stack[i].def ? "": "!",
+                        stack[i].id.c_str());
+          }
+          std::printf(")");
+        }
+        std::printf("\n");
+      }
     }
   }
 }
