@@ -18,6 +18,21 @@
 #include <map>
 #include <vector>
 
+void trim_string(std::string& s)
+{
+  int i=0;
+  for (; i<int(s.size()) && isspace(s[i]); ++i)
+    ;
+  s.erase(s.begin(), s.begin()+i);
+
+  if (!s.empty()) {
+    i=s.size()-1;
+    for (; i>=0 && isspace(s[i]); --i)
+      ;
+    s.erase(s.begin()+i, s.end());
+  }
+}
+
 //////////////////////////////////////////////////////////////////////
 // lexer
 
@@ -184,7 +199,6 @@ private:
   }
 
   void add_token_comment() {
-    // trim(tok_id);
     if (!tok_id.empty()) {
       data.comments.insert(data.comments.end(),
                            (uint8_t*)&tok_id[0],
@@ -215,20 +229,6 @@ private:
                 reader.pos().line,
                 reader.pos().col,
                 buf);
-  }
-
-  void trim(std::string& s) {
-    int i=0;
-    for (; i<int(s.size()) && isspace(s[i]); ++i)
-      ;
-    s.erase(s.begin(), s.begin()+i);
-
-    if (!s.empty()) {
-      i=s.size()-1;
-      for (; i>=0 && isspace(s[i]); --i)
-        ;
-      s.erase(s.begin()+i, s.end());
-    }
   }
 
   LexState state;
@@ -1028,9 +1028,10 @@ public:
 };
 
 //////////////////////////////////////////////////////////////////////
-// main
+// CLI Options
 
 struct Options {
+  std::string command;
   std::vector<std::string> parse_files;
   int threads;
   bool show_time = false;
@@ -1041,9 +1042,29 @@ struct Options {
   bool keyword_stats = false;
 };
 
+//////////////////////////////////////////////////////////////////////
+// Commands
+
+#include "docs.h"
+
+//////////////////////////////////////////////////////////////////////
+// main
+
 bool parse_options(int argc, char* argv[], Options& options)
 {
   for (int i=1; i<argc; ++i) {
+    // Ignore empty args?
+    if (argv[i][0] != '-') {
+      if (options.command.empty())
+        options.command = argv[i];
+      else
+        options.parse_files.push_back(argv[i]);
+      continue;
+    }
+    else if (options.command.empty()) {
+      options.command = "none";
+    }
+
     if (std::strcmp(argv[i], "-h") == 0) {
       std::printf("%s [-h] [directory | files.cpp]",
                   argv[0]);
@@ -1084,7 +1105,8 @@ bool parse_options(int argc, char* argv[], Options& options)
       }
     }
     else {
-      options.parse_files.push_back(argv[i]);
+      std::printf("%s: invalid argument %s", argv[0], argv[i]);
+      return false;
     }
   }
   return true;
@@ -1092,6 +1114,8 @@ bool parse_options(int argc, char* argv[], Options& options)
 
 void run_with_options(const Options& options)
 {
+  std::printf("running command \"%s\"\n", options.command.c_str());
+
   Stopwatch t;
   thread_pool pool(options.threads);
   std::vector<LexData> lex_data;
@@ -1134,6 +1158,9 @@ void run_with_options(const Options& options)
 
   if (options.show_time)
     t.watch("parse files");
+
+  if (options.command == "docs")
+    docs::run(options, pool, lex_data, parser_data);
 
   if (options.count_tokens) {
     int total_tokens = 0;

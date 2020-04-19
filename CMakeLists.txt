@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.16)
 project(cppiller)
 
 include_directories(.)
-add_definitions(-std=c++11)
+add_definitions(-std=c++11 -Wno-switch -Wno-format)
 add_executable(cppillr cppillr/cppillr.cpp)
 if(UNIX AND NOT APPLE)
   target_link_libraries(cppillr pthread)
