@@ -615,7 +615,7 @@ Lexer::Action Lexer::process()
     case LexState::ReadingUserHeaderName:
       if (chr == '"') {
         tok_id.push_back(chr);
-        add_token_id(TokenKind::Literal);
+        add_token_id(TokenKind::PPHeaderName);
         state = LexState::ReadingWhitespace;
       }
       else if (chr == '\\') {
