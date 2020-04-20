@@ -26,10 +26,9 @@ void trim_string(std::string& s)
   s.erase(s.begin(), s.begin()+i);
 
   if (!s.empty()) {
-    i=s.size()-1;
-    for (; i>=0 && isspace(s[i]); --i)
+    for (i=int(s.size())-1; i>=0 && !isspace(s[i]); --i)
       ;
-    s.erase(s.begin()+i, s.end());
+    s.erase(s.begin()+i+1, s.end());
   }
 }
 
@@ -199,6 +198,7 @@ private:
   }
 
   void add_token_comment() {
+    trim_string(tok_id);
     if (!tok_id.empty()) {
       data.comments.insert(data.comments.end(),
                            (uint8_t*)&tok_id[0],
