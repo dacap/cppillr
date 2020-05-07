@@ -7,8 +7,7 @@ namespace docs {
 
 struct DocSection {
   int level = 1;
-  std::string title;
-  std::string desc;
+  std::string id, type, line, desc;
 };
 
 struct Doc {
@@ -21,6 +20,28 @@ void error(const char* fmt, ...)
   va_start(vlist, fmt);
   std::vfprintf(stderr, fmt, vlist);
   va_end(vlist);
+}
+
+DocSection make_section(const LexData& data,
+                        const Token& comment_tok,
+                        const std::string& id,
+                        const std::string& type)
+{
+  DocSection sec;
+  sec.id = id;
+  sec.type = type;
+  trim_string(sec.id);
+  trim_string(sec.type);
+
+  char buf[1024*2];
+  std::sprintf(buf, "%s:%d:%d",
+               data.fn.c_str(),
+               comment_tok.pos.line,
+               comment_tok.pos.col);
+  sec.line = buf;
+  sec.desc = data.comment_text(comment_tok);
+  trim_string(sec.desc);
+  return sec;
 }
 
 Doc process_file(const LexData& data)
@@ -52,22 +73,10 @@ Doc process_file(const LexData& data)
                 break;
               }
 
-              std::string id(data.ids.begin()+data.tokens[i+2].i,
-                             data.ids.begin()+data.tokens[i+2].j);
-
-              DocSection sec;
-              sec.title = id + " (" + keywords_id[int(data.tokens[i+1].i)] + ")";
-
-              char buf[1024*2];
-              std::sprintf(buf, "%s:%d:%d:\n\n",
-                           data.fn.c_str(),
-                           tok.pos.line, tok.pos.col);
-              sec.desc = std::string(data.comments.begin()+data.tokens[i].i,
-                                     data.comments.begin()+data.tokens[i].j);
-              trim_string(sec.desc);
-              sec.desc = buf + sec.desc;
-
-              doc.sections.push_back(sec);
+              doc.sections.push_back(
+                make_section(data, tok,
+                             data.id_text(data.tokens[i+2]),
+                             keywords_id[int(data.tokens[i+1].i)]));
               break;
             }
               // Variables or functions
@@ -106,30 +115,74 @@ Doc process_file(const LexData& data)
                   data.tokens[i+2].kind != TokenKind::Identifier)
                 error("expecting identifier\n");
 
-              std::string id(data.ids.begin()+data.tokens[i+2].i,
-                             data.ids.begin()+data.tokens[i+2].j);
-
-              DocSection sec;
-              sec.title = id + " (" + keywords_id[int(data.tokens[i+1].i)] + ")";
-
-              char buf[1024*2];
-              std::sprintf(buf, "%s:%d:%d:\n\n",
-                           data.fn.c_str(),
-                           tok.pos.line, tok.pos.col);
-              sec.desc = std::string(data.comments.begin()+data.tokens[i].i,
-                                     data.comments.begin()+data.tokens[i].j);
-              trim_string(sec.desc);
-              sec.desc = buf + sec.desc;
-
-              std::string(sec.desc);
-              doc.sections.push_back(sec);
+              doc.sections.push_back(
+                make_section(data, tok,
+                             data.id_text(data.tokens[i+2]),
+                             keywords_id[int(data.tokens[i+1].i)]));
               break;
             }
           }
           break;
           // A user defined type to define a return value of a function or a variable type
         case TokenKind::Identifier: {
-          // TODO
+          ++i;
+
+          std::string type;
+
+          // TODO types that start with "const" go to the keyword
+          //      case, or with "::" go to punctuator case
+
+          if (data.tokens[i].is_double_colon()) {
+            type += "::";
+            ++i;
+          }
+
+          if (i >= n ||
+              data.tokens[i].kind != TokenKind::Identifier)
+            error("expecting identifier\n");
+
+          type += data.id_text(data.tokens[i]);
+          ++i;
+
+          if (i >= n)
+            error("expecting type and identifier\n");
+
+          while (data.tokens[i].is_double_colon()) {
+            type += "::";
+            ++i;
+            if (i == n ||
+                data.tokens[i].kind != TokenKind::Identifier)
+              error("expecting identifier after ::\n");
+
+            type += data.id_text(data.tokens[i]);
+            ++i;
+          }
+
+          while (i < n &&
+                 // Pointers and references
+                 ((data.tokens[i].kind == TokenKind::Punctuator &&
+                   ((data.tokens[i].i == '*' && data.tokens[i].j == 0) ||
+                    (data.tokens[i].i == '&' && data.tokens[i].j == 0)))
+                  ||
+                  // const
+                  (data.tokens[i].is_const_keyword()))) {
+            if (data.tokens[i].kind == TokenKind::Keyword) {
+              type.push_back(' ');
+              type += keywords_id[data.tokens[i].i];
+            }
+            else
+              type.push_back(data.tokens[i].i);
+            ++i;
+          }
+
+          if (i == n ||
+              data.tokens[i].kind != TokenKind::Identifier)
+            error("expecting identifier after type %s", type.c_str());
+
+          std::string id(data.id_text(data.tokens[i]));
+
+          doc.sections.push_back(
+            make_section(data, tok, id, type));
           break;
         }
       }
@@ -164,9 +217,13 @@ void run(
 
   for (const Doc& doc : docs) {
     for (const DocSection& sec : doc.sections) {
+#if 1
+      std::printf("%s: %s (%s)\n", sec.line.c_str(), sec.id.c_str(), sec.type.c_str());
+#else
       for (int i=0; i<sec.level; ++i)
         std::printf("#");
       std::printf(" %s\n\n%s\n", sec.title.c_str(), sec.desc.c_str());
+#endif
     }
   }
 }

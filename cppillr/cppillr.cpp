@@ -20,15 +20,18 @@
 
 void trim_string(std::string& s)
 {
-  int i=0;
-  for (; i<int(s.size()) && isspace(s[i]); ++i)
-    ;
-  s.erase(s.begin(), s.begin()+i);
+  int i;
 
   if (!s.empty()) {
-    for (i=int(s.size())-1; i>=0 && !isspace(s[i]); --i)
+    for (i=int(s.size())-1; i>=0 && isspace(s[i]); --i)
       ;
     s.erase(s.begin()+i+1, s.end());
+  }
+
+  if (!s.empty()) {
+    for (i=0; i<int(s.size()) && isspace(s[i]); ++i)
+      ;
+    s.erase(s.begin(), s.begin()+i);
   }
 }
 
@@ -82,6 +85,14 @@ struct Token {
 
   Token(TokenKind kind, const TextPos& pos, int i = 0, int j = 0)
     : kind(kind), pos(pos), i(i), j(j) { }
+
+  bool is_const_keyword() const {
+    return (kind == TokenKind::Keyword && i == key_const);
+  }
+
+  bool is_double_colon() const {
+    return (kind == TokenKind::Punctuator && i == ':' && j == ':');
+  }
 };
 
 // The lexer works like a finite-state machine where it's mainly
@@ -120,6 +131,16 @@ struct LexData {
   template<typename ...Args>
   void add_token(Args&& ...args) {
     tokens.emplace_back<Args...>(std::forward<Args>(args)...);
+  }
+
+  std::string id_text(const Token& tok) const {
+    return std::string(ids.begin()+tok.i,
+                       ids.begin()+tok.j);
+  }
+
+  std::string comment_text(const Token& tok) const {
+    return std::string(comments.begin()+tok.i,
+                       comments.begin()+tok.j);
   }
 };
 
@@ -229,6 +250,7 @@ private:
                 reader.pos().line,
                 reader.pos().col,
                 buf);
+    std::exit(1);
   }
 
   LexState state;
