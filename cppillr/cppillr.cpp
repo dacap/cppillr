@@ -35,6 +35,24 @@ void trim_string(std::string& s)
   }
 }
 
+void replace_string(
+  std::string& subject,
+  const std::string& replace_this,
+  const std::string& with_that)
+{
+  if (replace_this.empty())
+    return;
+
+  std::size_t i = 0;
+  while (true) {
+    i = subject.find(replace_this, i);
+    if (i == std::string::npos)
+      break;
+    subject.replace(i, replace_this.size(), with_that);
+    i += with_that.size();
+  }
+}
+
 //////////////////////////////////////////////////////////////////////
 // lexer
 
@@ -243,7 +261,7 @@ private:
 
   template<typename ...Args>
   void error(Args&& ...args) {
-    char buf[1024];
+    char buf[4096];
     std::sprintf(buf, std::forward<Args>(args)...);
     std::printf("%s:%d:%d: %s\n",
                 data.fn.c_str(),
@@ -1054,6 +1072,7 @@ public:
 
 struct Options {
   std::string command;
+  std::string print;
   std::vector<std::string> parse_files;
   int threads;
   bool show_time = false;
@@ -1100,6 +1119,12 @@ bool parse_options(int argc, char* argv[], Options& options)
         while (std::getline(f, line)) {
           options.parse_files.push_back(line);
         }
+      }
+    }
+    else if (std::strcmp(argv[i], "-print") == 0) {
+      ++i;
+      if (i < argc) {
+        options.print = argv[i];
       }
     }
     else if (std::strcmp(argv[i], "-showtime") == 0) {

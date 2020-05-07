@@ -14,12 +14,16 @@ struct Doc {
   std::vector<DocSection> sections;
 };
 
-void error(const char* fmt, ...)
+template<typename ...Args>
+void error(const LexData& data, const Token& tok, Args&& ...args)
 {
-  va_list vlist;
-  va_start(vlist, fmt);
-  std::vfprintf(stderr, fmt, vlist);
-  va_end(vlist);
+  char buf[4096];
+  std::sprintf(buf, std::forward<Args>(args)...);
+  std::printf("%s:%d:%d: %s\n",
+              data.fn.c_str(),
+              tok.pos.line,
+              tok.pos.col,
+              buf);
 }
 
 DocSection make_section(const LexData& data,
@@ -68,7 +72,7 @@ Doc process_file(const LexData& data)
             case key_namespace: {
               if (i+2 == n ||
                   data.tokens[i+2].kind != TokenKind::Identifier) {
-                error("expecting identifier after %s\n",
+                error(data, data.tokens[i+1], "expecting identifier after %s",
                       keywords_id[int(data.tokens[i+1].i)].c_str());
                 break;
               }
@@ -113,7 +117,7 @@ Doc process_file(const LexData& data)
             case key_wchar_t: {
               if (i+2 == n ||
                   data.tokens[i+2].kind != TokenKind::Identifier)
-                error("expecting identifier\n");
+                error(data, data.tokens[i+1], "expecting identifier");
 
               doc.sections.push_back(
                 make_section(data, tok,
@@ -139,20 +143,20 @@ Doc process_file(const LexData& data)
 
           if (i >= n ||
               data.tokens[i].kind != TokenKind::Identifier)
-            error("expecting identifier\n");
+            error(data, data.tokens[i-1], "expecting identifier");
 
           type += data.id_text(data.tokens[i]);
           ++i;
 
           if (i >= n)
-            error("expecting type and identifier\n");
+            error(data, data.tokens[i-1], "expecting type and identifier");
 
           while (data.tokens[i].is_double_colon()) {
             type += "::";
             ++i;
             if (i == n ||
                 data.tokens[i].kind != TokenKind::Identifier)
-              error("expecting identifier after ::\n");
+              error(data, data.tokens[i-1], "expecting identifier after ::");
 
             type += data.id_text(data.tokens[i]);
             ++i;
@@ -177,7 +181,7 @@ Doc process_file(const LexData& data)
 
           if (i == n ||
               data.tokens[i].kind != TokenKind::Identifier)
-            error("expecting identifier after type %s", type.c_str());
+            error(data, data.tokens[i-1], "expecting identifier after type %s", type.c_str());
 
           std::string id(data.id_text(data.tokens[i]));
 
@@ -217,13 +221,13 @@ void run(
 
   for (const Doc& doc : docs) {
     for (const DocSection& sec : doc.sections) {
-#if 1
-      std::printf("%s: %s (%s)\n", sec.line.c_str(), sec.id.c_str(), sec.type.c_str());
-#else
-      for (int i=0; i<sec.level; ++i)
-        std::printf("#");
-      std::printf(" %s\n\n%s\n", sec.title.c_str(), sec.desc.c_str());
-#endif
+      std::string templ = options.print;
+      replace_string(templ, "{id}", sec.id);
+      replace_string(templ, "{type}", sec.type);
+      replace_string(templ, "{line}", sec.line);
+      replace_string(templ, "{desc}", sec.desc);
+      if (!templ.empty())
+        std::puts(templ.c_str());
     }
   }
 }
