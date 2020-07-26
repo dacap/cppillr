@@ -302,6 +302,7 @@ Lexer::Result Lexer::lex(const std::string& fn)
       ;
   } while (chr);
   data.readed_bytes = reader.readed_bytes();
+  data.add_token(TokenKind::Eof, reader.pos());
   return Lexer::Result::OK;
 }
 
