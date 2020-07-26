@@ -14,18 +14,6 @@ struct Doc {
   std::vector<DocSection> sections;
 };
 
-template<typename ...Args>
-void error(const LexData& data, const Token& tok, Args&& ...args)
-{
-  char buf[4096];
-  std::sprintf(buf, std::forward<Args>(args)...);
-  std::printf("%s:%d:%d: %s\n",
-              data.fn.c_str(),
-              tok.pos.line,
-              tok.pos.col,
-              buf);
-}
-
 DocSection make_section(const LexData& data,
                         const Token& comment_tok,
                         const std::string& id,
@@ -48,39 +36,82 @@ DocSection make_section(const LexData& data,
   return sec;
 }
 
-Doc process_file(const LexData& data)
-{
-  Doc doc;
-  int n = int(data.tokens.size());
+class Parser {
+  const LexData& data;
+  Token tok;
+  std::vector<Token>::const_iterator tok_it, tok_end;
 
-  for (int i=0; i<n; ++i) {
-    // A comment, ok, it might be included in the docs
-    if (data.tokens[i].kind == TokenKind::Comment) {
-      if (i+1 == n) // end of tokens (a comment at the end of file, maybe commenting the file?)
+  // Reads next token
+  Token& next_token() {
+    if (tok_it != tok_end) {
+      tok = *tok_it;
+      ++tok_it;
+    }
+    else {
+      tok = Token(TokenKind::Eof, TextPos{0, 0});
+    }
+    return tok;
+  }
+
+  bool is(TokenKind kind) const {
+    return tok.kind == kind;
+  }
+
+  bool eof() const {
+    return is(TokenKind::Eof);
+  }
+
+  template<typename ...Args>
+  void error(Args&& ...args) {
+    char buf[4096];
+    std::sprintf(buf, std::forward<Args>(args)...);
+    std::printf("%s:%d:%d: %s\n",
+                data.fn.c_str(),
+                tok.pos.line,
+                tok.pos.col,
+                buf);
+    std::exit(1);
+  }
+
+public:
+  Parser(const LexData& data)
+    : data(data)
+    , tok(TokenKind::Eof, TextPos{0, 0})
+    , tok_it(data.tokens.begin())
+    , tok_end(data.tokens.end()) { }
+
+  void createDoc(Doc& doc) {
+    while (next_token().kind != TokenKind::Eof) {
+      // Discard tokens until we find a comment, which might be
+      // included in the docs.
+      if (!is(TokenKind::Comment))
+        continue;
+
+      Token commentTok = tok;
+      tok = next_token();
+      if (eof()) // end of tokens (a comment at the end of file, maybe commenting the file?)
         break;
 
-      auto& tok = data.tokens[i];
-
-      switch (data.tokens[i+1].kind) {
+      switch (tok.kind) {
         case TokenKind::Keyword:
-          switch (data.tokens[i+1].i) {
+          switch (tok.i) {
             // Structures and namespaces
             case key_class:
             case key_struct:
             case key_enum:
             case key_union:
             case key_namespace: {
-              if (i+2 == n ||
-                  data.tokens[i+2].kind != TokenKind::Identifier) {
-                error(data, data.tokens[i+1], "expecting identifier after %s",
-                      keywords_id[int(data.tokens[i+1].i)].c_str());
+              Token idTok = next_token();
+              if (!is(TokenKind::Identifier)) {
+                error("expecting identifier after %s",
+                      keywords_id[int(tok.i)].c_str());
                 break;
               }
 
               doc.sections.push_back(
-                make_section(data, tok,
-                             data.id_text(data.tokens[i+2]),
-                             keywords_id[int(data.tokens[i+1].i)]));
+                make_section(data, commentTok,
+                             data.id_text(idTok),
+                             keywords_id[int(tok.i)]));
               break;
             }
               // Variables or functions
@@ -115,83 +146,84 @@ Doc process_file(const LexData& data)
             case key_void:
             case key_volatile:
             case key_wchar_t: {
-              if (i+2 == n ||
-                  data.tokens[i+2].kind != TokenKind::Identifier)
-                error(data, data.tokens[i+1], "expecting identifier");
+              Token id_tok = next_token();
+              if (!is(TokenKind::Identifier))
+                error("expecting identifier");
 
               doc.sections.push_back(
-                make_section(data, tok,
-                             data.id_text(data.tokens[i+2]),
-                             keywords_id[int(data.tokens[i+1].i)]));
+                make_section(data, commentTok,
+                             data.id_text(id_tok),
+                             keywords_id[int(tok.i)]));
               break;
             }
           }
           break;
           // A user defined type to define a return value of a function or a variable type
         case TokenKind::Identifier: {
-          ++i;
-
+          Token firstTok = tok;
           std::string type;
 
           // TODO types that start with "const" go to the keyword
           //      case, or with "::" go to punctuator case
 
-          if (data.tokens[i].is_double_colon()) {
+          tok = next_token();
+          if (tok.is_double_colon()) {
             type += "::";
-            ++i;
+            tok = next_token();
           }
 
-          if (i >= n ||
-              data.tokens[i].kind != TokenKind::Identifier)
-            error(data, data.tokens[i-1], "expecting identifier");
+          if (!is(TokenKind::Identifier))
+            error("expecting identifier");
 
-          type += data.id_text(data.tokens[i]);
-          ++i;
+          type += data.id_text(tok);
+          next_token();
 
-          if (i >= n)
-            error(data, data.tokens[i-1], "expecting type and identifier");
-
-          while (data.tokens[i].is_double_colon()) {
+          while (tok.is_double_colon()) {
             type += "::";
-            ++i;
-            if (i == n ||
-                data.tokens[i].kind != TokenKind::Identifier)
-              error(data, data.tokens[i-1], "expecting identifier after ::");
+            next_token();
+            if (!is(TokenKind::Identifier))
+              error("expecting identifier after ::");
 
-            type += data.id_text(data.tokens[i]);
-            ++i;
+            type += data.id_text(tok);
+            next_token();
           }
 
-          while (i < n &&
+          while (!eof() &&
                  // Pointers and references
-                 ((data.tokens[i].kind == TokenKind::Punctuator &&
-                   ((data.tokens[i].i == '*' && data.tokens[i].j == 0) ||
-                    (data.tokens[i].i == '&' && data.tokens[i].j == 0)))
+                 ((is(TokenKind::Punctuator) &&
+                   ((tok.i == '*' && tok.j == 0) ||
+                    (tok.i == '&' && tok.j == 0)))
                   ||
                   // const
-                  (data.tokens[i].is_const_keyword()))) {
-            if (data.tokens[i].kind == TokenKind::Keyword) {
+                  (tok.is_const_keyword()))) {
+            if (is(TokenKind::Keyword)) {
               type.push_back(' ');
-              type += keywords_id[data.tokens[i].i];
+              type += keywords_id[tok.i];
             }
             else
-              type.push_back(data.tokens[i].i);
-            ++i;
+              type.push_back(tok.i); // Add '*' or '&'
+            next_token();
           }
 
-          if (i == n ||
-              data.tokens[i].kind != TokenKind::Identifier)
-            error(data, data.tokens[i-1], "expecting identifier after type %s", type.c_str());
+          if (!is(TokenKind::Identifier))
+            error("expecting identifier after type %s", type.c_str());
 
-          std::string id(data.id_text(data.tokens[i]));
+          std::string id(data.id_text(tok));
 
           doc.sections.push_back(
-            make_section(data, tok, id, type));
+            make_section(data, commentTok, id, type));
           break;
         }
       }
     }
   }
+};
+
+Doc process_file(const LexData& data)
+{
+  Doc doc;
+  Parser parser(data);
+  parser.createDoc(doc);
   return std::move(doc);
 }
 
