@@ -1153,7 +1153,7 @@ bool parse_options(int argc, char* argv[], Options& options)
       }
     }
     else {
-      std::printf("%s: invalid argument %s", argv[0], argv[i]);
+      std::printf("%s: invalid argument %s\n", argv[0], argv[i]);
       return false;
     }
   }
@@ -1259,7 +1259,7 @@ void create_keyword_tables()
 int main(int argc, char* argv[])
 {
   if (argc < 2) {
-    std::printf("%s: no input file", argv[0]);
+    std::printf("%s: no input file\n", argv[0]);
     return 1;
   }
 
