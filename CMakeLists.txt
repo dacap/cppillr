@@ -3,7 +3,7 @@
 # This file is released under the terms of the MIT license.
 # Read LICENSE.txt for more information.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.15)
 project(cppiller)
 
 include_directories(.)
