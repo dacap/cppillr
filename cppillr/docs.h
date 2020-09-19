@@ -3,6 +3,8 @@
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
 
+#include <cstdarg>
+
 namespace docs {
 
 struct DocSection {
