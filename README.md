@@ -14,6 +14,7 @@ is an experimental tool to analyze C++ code.
 
 Commands:
 
+* `cppiller run file.cpp`: Tries to compile and run the given `file.cpp` file (and its dependencies)
 * `cppiller docs`: Creates a markdown file with the documentation of the given files (Doxygen-like?)
 
 Global Options:

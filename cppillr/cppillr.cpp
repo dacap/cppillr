@@ -1088,6 +1088,7 @@ struct Options {
 // Commands
 
 #include "docs.h"
+#include "run.h"
 
 //////////////////////////////////////////////////////////////////////
 // main
@@ -1209,6 +1210,8 @@ void run_with_options(const Options& options)
 
   if (options.command == "docs")
     docs::run(options, pool, lex_data, parser_data);
+  else if (options.command == "run")
+    run::run(options, pool, lex_data, parser_data);
 
   if (options.count_tokens) {
     int total_tokens = 0;
