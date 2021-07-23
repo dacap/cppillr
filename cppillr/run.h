@@ -1,9 +1,20 @@
-// Copyright (C) 2020  David Capello
+// Copyright (C) 2020-2021  David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
 
 namespace run {
+
+void run_function(
+  const std::vector<LexData>& lex_data,
+  const std::vector<ParserData>& parser_data,
+  FunctionNode* f)
+{
+  // TODO
+  std::printf("calling main(), body tokens [%d,%d]\n",
+              f->body->beg_tok,
+              f->body->end_tok);
+}
 
 void run(
   const Options& options,
@@ -11,40 +22,33 @@ void run(
   const std::vector<LexData>& lex_data,
   const std::vector<ParserData>& parser_data)
 {
-  enum State { Outside, PP, Include };
+  std::vector<FunctionNode*> candidates;
 
-  for (const auto& data : lex_data) {
-    pool.execute(
-      [&data]() {
-        State state = State::Outside;
-        for (auto& tok : data.tokens) {
-          if (tok.kind == TokenKind::PPBegin) {
-            if (state == State::Outside)
-              state = State::PP;
-          }
-          else if (tok.kind == TokenKind::PPEnd) {
-            if (state == State::PP)
-              state = State::Outside;
-          }
-          else if (state == State::PP) {
-            if (tok.kind == TokenKind::PPKeyword &&
-                tok.i == pp_key_include) {
-              state = State::Include;
-            }
-          }
-          else if (state == State::Include) {
-            // TODO match header file name with library for the linker
-            std::string headerFile;
-            for (int i=tok.i; i<tok.j; ++i)
-              headerFile.push_back(data.ids[i]);
-            std::printf("%s\n", headerFile.c_str());
-            state = State::PP;
-          }
+  // Search 'main' function and start executing statement nodes from
+  // there.
+  for (const auto& data : parser_data) {
+    for (Node* n : data.functions) {
+      if (n->kind == NodeKind::Function) {
+        auto f = static_cast<FunctionNode*>(n);
+        if (f->name == "main") {
+          candidates.push_back(f);
         }
-      });
+      }
+    }
   }
 
-  pool.wait_all();
+  if (candidates.empty()) {
+    std::printf("no main() function found");
+  }
+  else if (candidates.size() != 1) {
+    std::printf("multiple main() functions found:");
+    // TODO print location of all main() functions
+  }
+  else {
+    run_function(lex_data,
+                 parser_data,
+                 candidates.front());
+  }
 }
 
 } // namespace run

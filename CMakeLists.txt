@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2020  David Capello
+# Copyright (C) 2019-2021  David Capello
 #
 # This file is released under the terms of the MIT license.
 # Read LICENSE.txt for more information.
@@ -8,7 +8,7 @@ project(cppiller)
 
 include_directories(.)
 if(UNIX)
-  add_definitions(-std=c++11 -Wno-switch -Wno-format)
+  add_definitions(-std=c++14 -Wno-switch -Wno-format)
 endif()
 add_executable(cppillr cppillr/cppillr.cpp)
 if(UNIX AND NOT APPLE)

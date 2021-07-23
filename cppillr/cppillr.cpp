@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020  David Capello
+// Copyright (C) 2019-2021  David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
@@ -784,23 +784,51 @@ Lexer::Action Lexer::process()
 //////////////////////////////////////////////////////////////////////
 // parser
 
+enum class NodeKind {
+  Function,
+};
+
+struct Node {
+  NodeKind kind;
+  virtual ~Node() { }
+};
+
+struct ParamNode : public Node {
+  Keyword builtin_type;
+  std::string name;
+};
+
+struct ParamsNode : public Node {
+  std::vector<ParamNode*> params;
+};
+
+struct BodyNode : public Node {
+  // Tokens to be processed in the future.
+  int beg_tok, end_tok;
+};
+
+struct FunctionNode : public Node {
+  // Function
+  Keyword builtin_type;
+  std::string name;
+  ParamsNode* params;
+  BodyNode* body;
+};
+
 struct ParserData {
-  struct Type {
-    std::string id;
-    TextPos pos;
-    Type() { }
-  };
-  struct Node {
-    enum Type {
-      Include,
-      Func,
-      Stmt,
-    };
-    Type type;
-  };
+  const LexData* lex;
   std::string fn;
-  std::vector<Type> types;
-  std::vector<Node> tree;
+  std::vector<FunctionNode*> functions;
+
+  ParserData() { }
+  ~ParserData() {
+    for (FunctionNode* f : functions)
+      delete f;
+  }
+
+  ParserData(ParserData&&) = default;
+  ParserData(const ParserData&) = delete;
+  ParserData& operator=(const ParserData&) = delete;
 };
 
 class Parser {
@@ -819,6 +847,7 @@ private:
       tok = &eof;
     return *tok;
   }
+
   const Token& next_token() {
     goto_token(++tok_i);
     return *tok;
@@ -828,9 +857,67 @@ private:
     return (tok->kind == kind);
   }
 
-  bool parse_dcl_seq();
-  bool parse_dcl();
-  bool parse_pp_line();
+  bool is_punctuator(char chr) const {
+    return (tok->kind == TokenKind::Punctuator &&
+            tok->i == chr);
+  }
+
+  bool is_builtin_type() const {
+    return (tok->kind == TokenKind::Keyword &&
+            (tok->i == key_auto ||
+             tok->i == key_bool ||
+             tok->i == key_char ||
+             tok->i == key_char8_t ||
+             tok->i == key_char16_t ||
+             tok->i == key_char32_t ||
+             tok->i == key_double ||
+             tok->i == key_float ||
+             tok->i == key_int ||
+             tok->i == key_long ||
+             tok->i == key_short ||
+             tok->i == key_signed ||
+             tok->i == key_unsigned ||
+             tok->i == key_void ||
+             tok->i == key_wchar_t));
+  }
+
+  void expect(TokenKind kind, const char* err) {
+    if (next_token().kind != kind)
+      error(err);
+  }
+
+  void expect(char chr) {
+    next_token();
+    if (!is_punctuator(chr)) {
+      error("expecting '%c'", chr);
+    }
+  }
+
+  bool dcl_seq();
+  bool dcl();
+  FunctionNode* function_definition();
+  ParamsNode* function_params();
+  BodyNode* function_body_fast();
+  bool pp_line();
+
+  template<typename ...Args>
+  void error(Args&& ...args) {
+    char buf[4096];
+    std::sprintf(buf, std::forward<Args>(args)...);
+    if (tok) {
+      std::printf("%s:%d:%d: %s\n",
+                  lex_data->fn.c_str(),
+                  tok->pos.line,
+                  tok->pos.col,
+                  buf);
+    }
+    else {
+      std::printf("%s: %s\n",
+                  lex_data->fn.c_str(),
+                  buf);
+    }
+    std::exit(1);
+  }
 
   ParserData data;
   int tok_i;
@@ -840,47 +927,122 @@ private:
   int depth = 0;
 };
 
-void Parser::parse(const LexData& lex) // TODO
+void Parser::parse(const LexData& lex)
 {
   data.fn = lex.fn;
 
   lex_data = &lex;
-  goto_token(0);
-
-  parse_dcl_seq();
+  goto_token(-1);
+  dcl_seq();
 }
 
-bool Parser::parse_dcl_seq()
+bool Parser::dcl_seq()
 {
   while (next_token().kind != TokenKind::Eof) {
-    if (!parse_dcl())
+    if (!dcl())
       return false;
   }
   return true;
 }
 
-bool Parser::parse_dcl()
+bool Parser::dcl()
 {
-  if (is(TokenKind::PPBegin)) {
-    return parse_pp_line();
-  }
-  else {
-    return false;
-  }
-}
-
-bool Parser::parse_pp_line()
-{
-  assert(is(TokenKind::PPBegin));
-  next_token();
-  if (is(TokenKind::PPKeyword)) {
-    switch ((PPKeyword)tok->i) {
-      case pp_key_include:
-        // TODO add_node();
-        break;
+  if (is_builtin_type()) {
+    FunctionNode* f = function_definition();
+    if (f) {
+      data.functions.push_back(f);
+      return true;
     }
   }
+
   return false;
+}
+
+FunctionNode* Parser::function_definition()
+{
+  if (is_builtin_type()) {
+    auto f = std::make_unique<FunctionNode>();
+    f->builtin_type = (Keyword)tok->i;
+
+    expect(TokenKind::Identifier, "expecting identifier for function");
+    f->name = lex_data->id_text(*tok);
+
+    f->params = function_params();
+    if (!f->params)
+      return nullptr;
+
+    f->body = function_body_fast();
+    if (!f->body)
+      return nullptr;
+
+    std::printf("function %s with %d params found, body tokens [%d,%d]\n",
+                f->name.c_str(),
+                f->params->params.size(),
+                f->body->beg_tok,
+                f->body->end_tok);
+
+    return f.release();
+  }
+
+  return nullptr;
+}
+
+ParamsNode* Parser::function_params()
+{
+  auto ps = std::make_unique<ParamsNode>();
+
+  expect('(');
+
+  while (next_token().kind != TokenKind::Eof) {
+    if (is_punctuator(')'))
+      return ps.release();
+    else if (is_builtin_type()) {
+      auto p = std::make_unique<ParamNode>();
+      p->builtin_type = (Keyword)tok->i;
+
+      expect(TokenKind::Identifier, "expecting identifier after param type");
+      p->name = lex_data->id_text(*tok);
+
+      ps->params.push_back(p.get());
+      p.release();
+
+      next_token();
+      if (is_punctuator(')'))
+        return ps.release();
+      else if (!is_punctuator(','))
+        error("expecting ',' or ')' after param name");
+    }
+    else {
+      error("expecting ')' or type");
+    }
+  }
+
+  return nullptr;
+}
+
+BodyNode* Parser::function_body_fast()
+{
+  auto b = std::make_unique<BodyNode>();
+  int scope = 0;
+
+  expect('{');
+  b->beg_tok = tok_i;
+  while (next_token().kind != TokenKind::Eof) {
+    if (is_punctuator('}')) {
+      if (scope == 0) {
+        b->end_tok = tok_i;
+        return b.release();
+      }
+      else
+        --scope;
+    }
+    else if (is_punctuator('{')) {
+      ++scope;
+    }
+  }
+
+  error("expecting '}' before EOF");
+  return nullptr;
 }
 
 //////////////////////////////////////////////////////////////////////
