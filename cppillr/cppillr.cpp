@@ -994,23 +994,36 @@ ParamsNode* Parser::function_params()
   expect('(');
 
   while (next_token().kind != TokenKind::Eof) {
-    if (is_punctuator(')'))
+    if (is_punctuator(')')) {
       return ps.release();
+    }
     else if (is_builtin_type()) {
       auto p = std::make_unique<ParamNode>();
       p->builtin_type = (Keyword)tok->i;
 
-      expect(TokenKind::Identifier, "expecting identifier after param type");
-      p->name = lex_data->id_text(*tok);
+      next_token();
+
+      // Pointers
+      while (is_punctuator('*')) // TODO add this info to param type
+        next_token();
+
+      if (is(TokenKind::Identifier)) { // Param with name
+        p->name = lex_data->id_text(*tok);
+
+        next_token();
+        if (is_punctuator(')'))
+          return ps.release();
+        else if (!is_punctuator(','))
+          error("expecting ',' or ')' after param name");
+      }
+      // Param without name
+      else if (is_punctuator(')'))
+        return ps.release();
+      else if (!is_punctuator(','))
+        error("expecting ',', ')', or param name after param type");
 
       ps->params.push_back(p.get());
       p.release();
-
-      next_token();
-      if (is_punctuator(')'))
-        return ps.release();
-      else if (!is_punctuator(','))
-        error("expecting ',' or ')' after param name");
     }
     else {
       error("expecting ')' or type");
