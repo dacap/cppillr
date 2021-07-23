@@ -1005,14 +1005,20 @@ ParamsNode* Parser::function_params()
         p->name = lex_data->id_text(*tok);
 
         next_token();
-        if (is_punctuator(')'))
+        if (is_punctuator(')')) {
+          ps->params.push_back(p.get());
+          p.release();
           return ps.release();
+        }
         else if (!is_punctuator(','))
           error("expecting ',' or ')' after param name");
       }
       // Param without name
-      else if (is_punctuator(')'))
+      else if (is_punctuator(')')) {
+        ps->params.push_back(p.get());
+        p.release();
         return ps.release();
+      }
       else if (!is_punctuator(','))
         error("expecting ',', ')', or param name after param type");
 
