@@ -6,7 +6,7 @@ expect_ret() {
     args=$3
 
     echo -n $cppfile
-    cppillr run -showtokens $cppfile $args >stdout || exit 1
+    cppillr run $cppfile $args >stdout || exit 1
     actual="$?"
 
     if [ "$actual" == "$expected" ] ; then
