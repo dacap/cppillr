@@ -5,9 +5,8 @@
 
 namespace run {
 
-void run_function(
-  const std::vector<LexData>& lex_data,
-  const std::vector<ParserData>& parser_data,
+static void run_function(
+  const Program& p,
   FunctionNode* f)
 {
   // TODO
@@ -19,14 +18,13 @@ void run_function(
 void run(
   const Options& options,
   thread_pool& pool,
-  const std::vector<LexData>& lex_data,
-  const std::vector<ParserData>& parser_data)
+  const Program& prog)
 {
   std::vector<FunctionNode*> candidates;
 
   // Search 'main' function and start executing statement nodes from
   // there.
-  for (const auto& data : parser_data) {
+  for (const auto& data : prog.parser_data) {
     for (FunctionNode* f : data.functions) {
       if (f->name == "main") {
         candidates.push_back(f);
@@ -42,9 +40,7 @@ void run(
     // TODO print location of all main() functions
   }
   else {
-    run_function(lex_data,
-                 parser_data,
-                 candidates.front());
+    run_function(prog, candidates.front());
   }
 }
 

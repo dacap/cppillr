@@ -1,4 +1,4 @@
-// Copyright (C) 2020  David Capello
+// Copyright (C) 2020-2021  David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
@@ -232,13 +232,12 @@ Doc process_file(const LexData& data)
 void run(
   const Options& options,
   thread_pool& pool,
-  const std::vector<LexData>& lex_data,
-  const std::vector<ParserData>& parser_data)
+  const Program& prog)
 {
   std::mutex docs_mutex;
   std::vector<Doc> docs;
 
-  for (const auto& data : lex_data) {
+  for (const auto& data : prog.lex_data) {
     pool.execute(
       [&data, &docs_mutex, &docs]() {
         Doc doc = process_file(data);

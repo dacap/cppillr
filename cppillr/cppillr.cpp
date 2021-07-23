@@ -1059,6 +1059,35 @@ BodyNode* Parser::function_body_fast()
 }
 
 //////////////////////////////////////////////////////////////////////
+// Data collected from the source code (tokens + AST nodes)
+
+class Program {
+  mutable std::mutex lex_mutex;
+  mutable std::mutex parser_mutex;
+public:
+  std::vector<LexData> lex_data;
+  std::vector<ParserData> parser_data;
+
+  int add_lex(LexData&& lex) {
+    std::unique_lock<std::mutex> l(lex_mutex);
+    int i = int(lex_data.size());
+    lex_data.emplace_back(std::move(lex));
+    return i;
+  }
+
+  void get_lex(int i, LexData& output) const {
+    std::unique_lock<std::mutex> l(lex_mutex);
+    output = lex_data[i];
+  }
+
+  void add_parser_data(ParserData&& data) {
+    std::unique_lock<std::mutex> l(parser_mutex);
+    parser_data.emplace_back(std::move(data));
+  }
+
+};
+
+//////////////////////////////////////////////////////////////////////
 // tools
 
 void show_tokens(const LexData& data)
@@ -1367,39 +1396,25 @@ void run_with_options(const Options& options)
 
   Stopwatch t;
   thread_pool pool(options.threads);
-  std::vector<LexData> lex_data;
-  std::vector<ParserData> parser_data;
-  std::mutex lex_mutex;
-  std::mutex parser_mutex;
+  Program prog;
 
   for (const auto& fn : options.parse_files) {
     pool.execute(
-      [&pool, fn,
-       &lex_data, &lex_mutex,
-       &parser_data, &parser_mutex]{
+      [&pool, fn, &prog]{
         Lexer lexer;
         lexer.lex(fn);
 
-        int i;
-        {
-          std::unique_lock<std::mutex> l(lex_mutex);
-          i = lex_data.size();
-          lex_data.emplace_back(lexer.move_data());
-        }
+        int i = prog.add_lex(lexer.move_data());
 
         pool.execute(
-          [i, &lex_data, &lex_mutex,
-           &parser_data, &parser_mutex]{
+          [i, &prog]{
             LexData data;
-            {
-              std::unique_lock<std::mutex> l(lex_mutex);
-              data = lex_data[i];
-            }
+            prog.get_lex(i, data);
+
             Parser parser;
             parser.parse(data);
 
-            std::unique_lock<std::mutex> l(parser_mutex);
-            parser_data.emplace_back(parser.move_data());
+            prog.add_parser_data(parser.move_data());
           });
       });
   }
@@ -1409,13 +1424,13 @@ void run_with_options(const Options& options)
     t.watch("parse files");
 
   if (options.command == "docs")
-    docs::run(options, pool, lex_data, parser_data);
+    docs::run(options, pool, prog);
   else if (options.command == "run")
-    run::run(options, pool, lex_data, parser_data);
+    run::run(options, pool, prog);
 
   if (options.count_tokens) {
     int total_tokens = 0;
-    for (auto& data : lex_data)
+    for (auto& data : prog.lex_data)
       total_tokens += data.tokens.size();
 
     std::printf("total tokens %d\n", total_tokens);
@@ -1423,7 +1438,7 @@ void run_with_options(const Options& options)
 
   if (options.count_lines) {
     int total_lines = 0;
-    for (auto& data : lex_data)
+    for (auto& data : prog.lex_data)
       total_lines += count_lines(data);
 
     std::printf("total lines %d\n", total_lines);
@@ -1431,24 +1446,24 @@ void run_with_options(const Options& options)
 
   if (options.keyword_stats) {
     KeywordStats keyword_stats;
-    for (auto& data : lex_data)
+    for (auto& data : prog.lex_data)
       keyword_stats.add(data);
 
     keyword_stats.print();
   }
 
   if (options.show_tokens) {
-    for (auto& data : lex_data)
+    for (auto& data : prog.lex_data)
       show_tokens(data);
   }
 
   if (options.show_includes) {
-    for (auto& data : lex_data)
+    for (auto& data : prog.lex_data)
       show_includes(data);
   }
 
   if (options.show_functions) {
-    for (const auto& data : parser_data)
+    for (const auto& data : prog.parser_data)
       show_functions(data, options.show_tokens);
   }
 }
