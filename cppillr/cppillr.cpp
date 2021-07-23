@@ -975,12 +975,6 @@ FunctionNode* Parser::function_definition()
     if (!f->body)
       return nullptr;
 
-    std::printf("function %s with %d params found, body tokens [%d,%d]\n",
-                f->name.c_str(),
-                f->params->params.size(),
-                f->body->beg_tok,
-                f->body->end_tok);
-
     return f.release();
   }
 
@@ -1207,6 +1201,27 @@ void show_includes(const LexData& data)
   }
 }
 
+void show_functions(const ParserData& data,
+                    const bool show_tokens)
+{
+  for (FunctionNode* f : data.functions) {
+    std::printf("function %s()",
+                f->name.c_str());
+    if (show_tokens)
+      std::printf(" body tokens [%d,%d]",
+                  f->body->beg_tok,
+                  f->body->end_tok);
+    std::printf("\n");
+
+    for (ParamNode* p : f->params->params) {
+      std::printf(" param %s %s\n",
+                  keywords_id[p->builtin_type].c_str(),
+                  p->name.c_str());
+    }
+  }
+}
+
+
 int count_lines(const LexData& data)
 {
   int nlines = 0;
@@ -1254,6 +1269,7 @@ struct Options {
   bool show_time = false;
   bool show_tokens = false;
   bool show_includes = false;
+  bool show_functions = false;
   bool count_tokens = false;
   bool count_lines = false;
   bool keyword_stats = false;
@@ -1312,6 +1328,9 @@ bool parse_options(int argc, char* argv[], Options& options)
     }
     else if (std::strcmp(argv[i], "-showincludes") == 0) {
       options.show_includes = true;
+    }
+    else if (std::strcmp(argv[i], "-showfunctions") == 0) {
+      options.show_functions = true;
     }
     else if (std::strcmp(argv[i], "-counttokens") == 0) {
       options.count_tokens = true;
@@ -1420,6 +1439,11 @@ void run_with_options(const Options& options)
   if (options.show_includes) {
     for (auto& data : lex_data)
       show_includes(data);
+  }
+
+  if (options.show_functions) {
+    for (const auto& data : parser_data)
+      show_functions(data, options.show_tokens);
   }
 }
 
