@@ -715,7 +715,7 @@ Lexer::Action Lexer::process()
     case LexState::ReadingHexadecimal:
       if ((chr >= 'a' && chr <= 'f') ||
           (chr >= 'A' && chr <= 'F') ||
-          (chr >= '0' && chr <= '0')) {
+          (chr >= '0' && chr <= '9')) {
         tok_id.push_back(chr);
       }
       else {
