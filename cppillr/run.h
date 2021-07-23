@@ -27,12 +27,9 @@ void run(
   // Search 'main' function and start executing statement nodes from
   // there.
   for (const auto& data : parser_data) {
-    for (Node* n : data.functions) {
-      if (n->kind == NodeKind::Function) {
-        auto f = static_cast<FunctionNode*>(n);
-        if (f->name == "main") {
-          candidates.push_back(f);
-        }
+    for (FunctionNode* f : data.functions) {
+      if (f->name == "main") {
+        candidates.push_back(f);
       }
     }
   }
