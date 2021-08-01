@@ -14,14 +14,17 @@ jobs:
     - name: Generating Makefiles
       shell: bash
       run: |
+        mkdir build
+        cd build
         if [[ "${{ runner.os }}" == "Windows" ]] ; then
-          cmake . -G "NMake Makefiles"
+          cmake .. -G "NMake Makefiles"
         else
-          cmake . -G "Unix Makefiles"
+          cmake .. -G "Unix Makefiles"
         fi
     - name: Compiling
       shell: bash
       run: |
+        cd build
         if [[ "${{ runner.os }}" == "Windows" ]] ; then
           nmake
         else
@@ -30,5 +33,5 @@ jobs:
     - name: Running Tests
       shell: bash
       run: |
-        CPPILLR=$(pwd)/cppillr
+        export CPPILLR=$(pwd)/build/cppillr
         cd tests && bash run.sh
