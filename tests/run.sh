@@ -13,7 +13,8 @@ expect_return_expr() {
     echo -n $(pwd)/return_expr.cpp
     cat return_expr.cpp | \
 	sed -e "s/\${EXPR}/$expr/" | \
-	$CPPILLR run -- >stdout
+	tee _tmp.cpp | \
+	$CPPILLR run -- >_stdout
     actual="$?"
 
     if [ "$actual" == "$expected" ] ; then
