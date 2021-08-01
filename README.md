@@ -1,6 +1,9 @@
 # cppillr
 *by David Capello*
 
+[![ci](https://github.com/dacap/cppillr/actions/workflows/ci.yml/badge.svg)](https://github.com/dacap/cppillr/actions/workflows/ci.yml)
+[![MIT Licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+
 *cppillr* ([cpluspiller](https://translate.google.com/#view=home&op=translate&sl=en&tl=en&text=cpluspiller))
 is an experimental tool to analyze C++ code.
 
