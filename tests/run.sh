@@ -1,21 +1,25 @@
 #! /bin/bash
 
-expect_ret() {
-    expected=$1
-    cppfile=$(pwd)/$2.cpp
-    args=$3
+return_expr_cpp=$(pwd)/return_expr.cpp
 
-    echo -n $cppfile
-    cppillr run $cppfile $args >stdout || exit 1
+expect_return_expr() {
+    expected="$1"
+    expr="$2"
+
+    echo -n $(pwd)/return_expr.cpp
+    cat return_expr.cpp | \
+	sed -e "s/\${EXPR}/$expr/" | \
+	cppillr run -- >stdout
     actual="$?"
 
     if [ "$actual" == "$expected" ] ; then
-        echo ": ok"
+        echo ": ok $expr"
     else
-        echo ":1: failed, expected exit code=$expected, actual=$actual"
+        echo ":1: failed $expr, expected exit code=$expected, actual=$actual"
         exit 1
     fi
 }
 
-# Expect a specific return value
-expect_ret 42 ret42
+# Expect a specific return value for the given expression
+expect_return_expr 1 1
+expect_return_expr 5 5

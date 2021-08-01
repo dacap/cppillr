@@ -282,7 +282,7 @@ private:
 
 Lexer::Result Lexer::lex(const std::string& fn)
 {
-  std::FILE* f = std::fopen(fn.c_str(), "r");
+  std::FILE* f = (fn.empty() ? stdin: std::fopen(fn.c_str(), "r"));
   if (!f)
     return Lexer::Result::ErrorOpeningFile;
 
@@ -785,34 +785,72 @@ Lexer::Action Lexer::process()
 // parser
 
 enum class NodeKind {
+  ParamNode,
+  ParamsNode,
+  Expr,
+  Literal,
+  Return,
+  CompoundStmt,
+  Body,
   Function,
 };
 
 struct Node {
   NodeKind kind;
+
+  Node(NodeKind kind) : kind(kind) { }
   virtual ~Node() { }
 };
 
 struct ParamNode : public Node {
   Keyword builtin_type;
   std::string name;
+  ParamNode() : Node(NodeKind::ParamNode) { }
 };
 
 struct ParamsNode : public Node {
   std::vector<ParamNode*> params;
+  ParamsNode() : Node(NodeKind::ParamsNode) { }
+};
+
+struct Expr : public Node {
+  Expr(NodeKind kind = NodeKind::Expr) : Node(kind) { }
+};
+
+struct Literal : public Expr {
+  int value;
+  Literal() : Expr(NodeKind::Literal) { }
+};
+
+struct Stmt : public Node {
+  Stmt(NodeKind kind) : Node(kind) { }
+};
+
+struct Return : public Stmt {
+  Expr* expr = nullptr;
+  Return() : Stmt(NodeKind::Return) { }
+};
+
+struct CompoundStmt : public Stmt {
+  std::vector<Stmt*> stmts;
+  CompoundStmt() : Stmt(NodeKind::CompoundStmt) { }
 };
 
 struct BodyNode : public Node {
   // Tokens to be processed in the future.
+  int lex_i;
   int beg_tok, end_tok;
+  CompoundStmt* block = nullptr;
+  BodyNode() : Node(NodeKind::Body) { }
 };
 
 struct FunctionNode : public Node {
   // Function
   Keyword builtin_type;
   std::string name;
-  ParamsNode* params;
-  BodyNode* body;
+  ParamsNode* params = nullptr;
+  BodyNode* body = nullptr;
+  FunctionNode() : Node(NodeKind::Function) { }
 };
 
 struct ParserData {
@@ -833,8 +871,9 @@ struct ParserData {
 
 class Parser {
 public:
-  Parser() { }
+  Parser(int lex_i = 0) : lex_i(lex_i) { }
   void parse(const LexData& lex);
+  void parse_function_body(const LexData& lex, FunctionNode* f);
 
   ParserData&& move_data() { return std::move(data); }
 
@@ -898,6 +937,10 @@ private:
   FunctionNode* function_definition();
   ParamsNode* function_params();
   BodyNode* function_body_fast();
+  CompoundStmt* compound_statement();
+  Stmt* statement();
+  Return* return_stmt();
+  Expr* expression();
   bool pp_line();
 
   template<typename ...Args>
@@ -920,6 +963,7 @@ private:
   }
 
   ParserData data;
+  int lex_i;
   int tok_i;
   Token eof = { TokenKind::Eof, TextPos(0, 0) };
   const LexData* lex_data;
@@ -930,10 +974,19 @@ private:
 void Parser::parse(const LexData& lex)
 {
   data.fn = lex.fn;
-
   lex_data = &lex;
   goto_token(-1);
   dcl_seq();
+}
+
+// Converts a function body that was "fast parsed" (only tokens) into
+// AST nodes.
+void Parser::parse_function_body(const LexData& lex, FunctionNode* f)
+{
+  data.fn = lex.fn;
+  lex_data = &lex;
+  goto_token(f->body->beg_tok);
+  f->body->block = compound_statement();
 }
 
 bool Parser::dcl_seq()
@@ -986,7 +1039,6 @@ ParamsNode* Parser::function_params()
   auto ps = std::make_unique<ParamsNode>();
 
   expect('(');
-
   while (next_token().kind != TokenKind::Eof) {
     if (is_punctuator(')')) {
       return ps.release();
@@ -1039,6 +1091,7 @@ BodyNode* Parser::function_body_fast()
   int scope = 0;
 
   expect('{');
+  b->lex_i = lex_i;
   b->beg_tok = tok_i;
   while (next_token().kind != TokenKind::Eof) {
     if (is_punctuator('}')) {
@@ -1055,6 +1108,92 @@ BodyNode* Parser::function_body_fast()
   }
 
   error("expecting '}' before EOF");
+  return nullptr;
+}
+
+CompoundStmt* Parser::compound_statement()
+{
+  auto b = std::make_unique<CompoundStmt>();
+
+  if (!is_punctuator('{'))
+    error("expecting '{' to start a block");
+
+  next_token();                 // Skip '{'
+
+  while (tok->kind != TokenKind::Eof) {
+    if (is_punctuator('}')) {
+      return b.release();
+    }
+    else {
+      auto s = statement();
+      if (s)
+        b->stmts.push_back(s);
+      else
+        return nullptr;
+    }
+  }
+
+  error("expecting '}' before EOF");
+  return nullptr;
+}
+
+Stmt* Parser::statement()
+{
+  if (is_punctuator(';')) {
+    next_token(); // Skip ';', empty expression
+    return nullptr;
+  }
+  else if (tok->kind == TokenKind::Keyword) {
+    // Return statement
+    switch (tok->i) {
+
+      case key_return:
+        return return_stmt();
+
+      default:
+        error("not supported keyword %s",
+              keywords_id[tok->i].c_str());
+        break;
+    }
+  }
+
+  error("expecting '}' or statement");
+  return nullptr;
+}
+
+Return* Parser::return_stmt()
+{
+  auto r = std::make_unique<Return>();
+  bool err = false;
+
+  if (next_token().kind != TokenKind::Eof) {
+    if (!is_punctuator(';')) {
+      r->expr = expression();
+      if (!r->expr)
+        err = true;
+    }
+    if (is_punctuator(';')) {
+      next_token(); // Skip ';', return with expression
+    }
+  }
+  else
+    err = true;
+
+  if (err)
+    error("expecting ';' or expression for return statement");
+
+  return r.release();
+}
+
+Expr* Parser::expression()
+{
+  if (is(TokenKind::NumericConstant)) {
+    auto e = std::make_unique<Literal>();
+    e->value = std::strtol(lex_data->id_text(*tok).c_str(), nullptr, 0);
+    next_token(); // Skip number
+    return e.release();
+  }
+
   return nullptr;
 }
 
@@ -1096,10 +1235,11 @@ void show_tokens(const LexData& data)
               data.fn.c_str(),
               int(data.tokens.size()));
 
+  int i = 0;
   for (auto& tok : data.tokens) {
-    std::printf("%s:%d:%d: ",
+    std::printf("%s:%d:%d: [%d] ",
                 data.fn.c_str(),
-                tok.pos.line, tok.pos.col);
+                tok.pos.line, tok.pos.col, i);
     switch (tok.kind) {
       case TokenKind::PPBegin:
         std::printf("PP { \n");
@@ -1156,6 +1296,7 @@ void show_tokens(const LexData& data)
           std::printf("OP %c\n", (char)tok.i);
         break;
     }
+    ++i;
   }
 }
 
@@ -1236,6 +1377,11 @@ void show_includes(const LexData& data)
   }
 }
 
+void show_ast(const ParserData& data)
+{
+  // TODO
+}
+
 void show_functions(const ParserData& data,
                     const bool show_tokens)
 {
@@ -1303,6 +1449,7 @@ struct Options {
   int threads;
   bool show_time = false;
   bool show_tokens = false;
+  bool show_ast = false;
   bool show_includes = false;
   bool show_functions = false;
   bool count_tokens = false;
@@ -1361,6 +1508,9 @@ bool parse_options(int argc, char* argv[], Options& options)
     else if (std::strcmp(argv[i], "-showtokens") == 0) {
       options.show_tokens = true;
     }
+    else if (std::strcmp(argv[i], "-showast") == 0) {
+      options.show_ast = true;
+    }
     else if (std::strcmp(argv[i], "-showincludes") == 0) {
       options.show_includes = true;
     }
@@ -1382,6 +1532,10 @@ bool parse_options(int argc, char* argv[], Options& options)
         options.threads = std::strtol(argv[i], nullptr, 10);
       }
     }
+    else if (std::strcmp(argv[i], "--") == 0) {
+      ++i;
+      options.parse_files.push_back(std::string()); // parse stdin
+    }
     else {
       std::printf("%s: invalid argument %s\n", argv[0], argv[i]);
       return false;
@@ -1390,9 +1544,10 @@ bool parse_options(int argc, char* argv[], Options& options)
   return true;
 }
 
-void run_with_options(const Options& options)
+int run_with_options(const Options& options)
 {
   std::printf("running command \"%s\"\n", options.command.c_str());
+  int ret_value = 0;
 
   Stopwatch t;
   thread_pool pool(options.threads);
@@ -1411,7 +1566,7 @@ void run_with_options(const Options& options)
             LexData data;
             prog.get_lex(i, data);
 
-            Parser parser;
+            Parser parser(i);
             parser.parse(data);
 
             prog.add_parser_data(parser.move_data());
@@ -1426,7 +1581,7 @@ void run_with_options(const Options& options)
   if (options.command == "docs")
     docs::run(options, pool, prog);
   else if (options.command == "run")
-    run::run(options, pool, prog);
+    ret_value = run::run(options, pool, prog);
 
   if (options.count_tokens) {
     int total_tokens = 0;
@@ -1466,6 +1621,8 @@ void run_with_options(const Options& options)
     for (const auto& data : prog.parser_data)
       show_functions(data, options.show_tokens);
   }
+
+  return ret_value;
 }
 
 void create_keyword_tables()
@@ -1492,6 +1649,5 @@ int main(int argc, char* argv[])
     return 0;
 
   create_keyword_tables();
-  run_with_options(options);
-  return 0;
+  return run_with_options(options);
 }

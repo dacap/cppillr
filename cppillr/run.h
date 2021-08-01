@@ -5,22 +5,69 @@
 
 namespace run {
 
-static void run_function(
-  const Program& p,
-  FunctionNode* f)
+struct VM {
+  std::vector<int> stack;
+};
+
+static void run_node(
+  Node* n,
+  Program& p,
+  VM& vm)
 {
-  // TODO
-  std::printf("calling main(), body tokens [%d,%d]\n",
-              f->body->beg_tok,
-              f->body->end_tok);
+  switch (n->kind) {
+
+    case NodeKind::Literal: {
+      auto l = static_cast<Literal*>(n);
+      vm.stack.push_back(l->value);
+      break;
+    }
+
+    case NodeKind::Return: {
+      auto r = static_cast<Return*>(n);
+      // Run the return expression (the result should be left in the stack)
+      if (r->expr)
+        run_node(r->expr, p, vm);
+      break;
+    }
+
+    case NodeKind::CompoundStmt: {
+      auto e = static_cast<CompoundStmt*>(n);
+      for (Stmt* stmt : e->stmts) {
+        run_node(stmt, p, vm);
+      }
+      n = nullptr;
+      break;
+    }
+
+    case NodeKind::Function: {
+      auto f = static_cast<FunctionNode*>(n);
+      const LexData& lex_data = p.lex_data[f->body->lex_i];
+
+      // Parse function that was just fast-parsed (only tokens)
+      if (!f->body->block) {
+        Parser parser;
+        parser.parse_function_body(lex_data, f);
+
+        if (!f->body->block) {
+          std::printf("error parsing %s() function body", f->name.c_str());
+          std::exit(1);
+        }
+      }
+
+      run_node(f->body->block, p, vm);
+      break;
+    }
+
+  }
 }
 
-void run(
+int run(
   const Options& options,
   thread_pool& pool,
-  const Program& prog)
+  Program& prog)
 {
   std::vector<FunctionNode*> candidates;
+  int ret_value = 1;
 
   // Search 'main' function and start executing statement nodes from
   // there.
@@ -40,8 +87,14 @@ void run(
     // TODO print location of all main() functions
   }
   else {
-    run_function(prog, candidates.front());
+    VM vm;
+    run_node(candidates.front(), prog, vm);
+    if (!vm.stack.empty())
+      ret_value = vm.stack[0];
+    else
+      ret_value = 0;
   }
+  return ret_value;
 }
 
 } // namespace run
