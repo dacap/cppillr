@@ -1,5 +1,9 @@
 #! /bin/bash
 
+if [[ "$CPPILLR" == "" ]] ; then
+    CPPILLR="cppillr"
+fi
+
 return_expr_cpp=$(pwd)/return_expr.cpp
 
 expect_return_expr() {
@@ -9,7 +13,7 @@ expect_return_expr() {
     echo -n $(pwd)/return_expr.cpp
     cat return_expr.cpp | \
 	sed -e "s/\${EXPR}/$expr/" | \
-	cppillr run -- >stdout
+	$CPPILLR run -- >stdout
     actual="$?"
 
     if [ "$actual" == "$expected" ] ; then

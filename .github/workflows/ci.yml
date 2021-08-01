@@ -30,4 +30,5 @@ jobs:
     - name: Running Tests
       shell: bash
       run: |
+        CPPILLR=$(pwd)/cppillr
         cd tests && bash run.sh
