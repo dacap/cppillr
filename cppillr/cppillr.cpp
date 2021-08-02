@@ -165,9 +165,59 @@ void show_includes(const LexData& data)
   }
 }
 
+void show_ast_node(Node* n, int indent)
+{
+  for (int i=0; i<indent; ++i)
+    std::printf("  ");
+
+  switch (n->kind) {
+
+    case NodeKind::BinExpr: {
+      auto be = static_cast<BinExpr*>(n);
+      std::printf("BinExpr %c\n", be->op);
+      show_ast_node(be->lhs, indent+1);
+      show_ast_node(be->rhs, indent+1);
+      break;
+    }
+
+    case NodeKind::Literal: {
+      auto l = static_cast<Literal*>(n);
+      std::printf("Literal %d\n", l->value);
+      break;
+    }
+
+    case NodeKind::Return: {
+      auto r = static_cast<Return*>(n);
+      std::printf("Return\n");
+      if (r->expr)
+        show_ast_node(r->expr, indent+1);
+      break;
+    }
+
+    case NodeKind::CompoundStmt: {
+      auto e = static_cast<CompoundStmt*>(n);
+      std::printf("CompoundStmt\n");
+      for (Stmt* stmt : e->stmts) {
+        show_ast_node(stmt, indent+1);
+      }
+      break;
+    }
+
+    case NodeKind::Function: {
+      auto f = static_cast<FunctionNode*>(n);
+      std::printf("Function %s\n", f->name.c_str());
+      show_ast_node(f->body->block, indent+1);
+      break;
+    }
+
+  }
+}
+
 void show_ast(const ParserData& data)
 {
-  // TODO
+  for (FunctionNode* f : data.functions) {
+    show_ast_node(f, 0);
+  }
 }
 
 void show_functions(const ParserData& data,
@@ -374,6 +424,11 @@ int run_with_options(const Options& options)
   if (options.show_tokens) {
     for (auto& data : prog.lex_data)
       show_tokens(data);
+  }
+
+  if (options.show_ast) {
+    for (auto& data : prog.parser_data)
+      show_ast(data);
   }
 
   if (options.show_includes) {
