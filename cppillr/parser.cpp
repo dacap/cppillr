@@ -223,12 +223,71 @@ Return* Parser::return_stmt()
 
 Expr* Parser::expression()
 {
-  if (is(TokenKind::NumericConstant)) {
-    auto e = std::make_unique<Literal>();
-    e->value = std::strtol(lex_data->id_text(*tok).c_str(), nullptr, 0);
-    next_token(); // Skip number
-    return e.release();
+  return additive_expression();
+}
+
+// [expr.add]
+Expr* Parser::additive_expression()
+{
+  std::unique_ptr<Expr> e(multiplicative_expression());
+  if (!e)
+    return nullptr;
+
+  while (is_punctuator('+') ||
+         is_punctuator('-')) {
+    auto be = std::make_unique<BinExpr>();
+    be->op = tok->i;
+    be->lhs = e.release();
+
+    next_token();
+    be->rhs = multiplicative_expression();
+    e = std::move(be);
   }
 
+  return e.release();
+}
+
+// [expr.mul]
+Expr* Parser::multiplicative_expression()
+{
+  std::unique_ptr<Expr> e(primary_expression());
+  if (!e)
+    return nullptr;
+
+  while (is_punctuator('*') ||
+         is_punctuator('/') ||
+         is_punctuator('%')) {
+    auto be = std::make_unique<BinExpr>();
+    be->op = tok->i;
+    be->lhs = e.release();
+
+    next_token();
+    be->rhs = primary_expression();
+    if (!be->rhs)
+      error("expecting expression after %c", be->op);
+
+    e = std::move(be);
+  }
+
+  return e.release();
+}
+
+// [expr.prim]
+Expr* Parser::primary_expression()
+{
+  if (is_punctuator('(')) {
+    next_token();               // Skip '('
+    std::unique_ptr<Expr> e(expression());
+    if (!is_punctuator(')'))
+      error("expected ')' to finish expression");
+    next_token();
+    return e.release();
+  }
+  else if (is(TokenKind::NumericConstant)) {
+    auto l = std::make_unique<Literal>();
+    l->value = std::strtol(lex_data->id_text(*tok).c_str(), nullptr, 0);
+    next_token();
+    return l.release();
+  }
   return nullptr;
 }

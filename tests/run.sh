@@ -12,7 +12,7 @@ expect_return_expr() {
 
     echo -n $(pwd)/return_expr.cpp
     cat return_expr.cpp | \
-	sed -e "s/\${EXPR}/$expr/" | \
+	sed -e "s@\${EXPR}@$expr@" | \
 	tee _tmp.cpp | \
 	$CPPILLR run -- >_stdout
     actual="$?"
@@ -28,3 +28,11 @@ expect_return_expr() {
 # Expect a specific return value for the given expression
 expect_return_expr 1 1
 expect_return_expr 5 5
+expect_return_expr 3 2+1
+expect_return_expr 42 "10 + 32"
+expect_return_expr 3 5-2
+expect_return_expr 4 5-2+1
+expect_return_expr 10 5*2
+expect_return_expr 18 10+4*2
+expect_return_expr 7 "(10+4)/2"
+expect_return_expr 2 "32%10"

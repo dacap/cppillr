@@ -12,6 +12,7 @@ enum class NodeKind {
   ParamNode,
   ParamsNode,
   Expr,
+  BinExpr,
   Literal,
   Return,
   CompoundStmt,
@@ -41,6 +42,17 @@ struct Expr : public Node {
   Expr(NodeKind kind = NodeKind::Expr) : Node(kind) { }
 };
 
+struct BinExpr : public Expr {
+  char op;
+  Expr* lhs;
+  Expr* rhs;
+  BinExpr() : Expr(NodeKind::BinExpr) { }
+  ~BinExpr() {
+    delete lhs;
+    delete rhs;
+  }
+};
+
 struct Literal : public Expr {
   int value;
   Literal() : Expr(NodeKind::Literal) { }
@@ -53,11 +65,16 @@ struct Stmt : public Node {
 struct Return : public Stmt {
   Expr* expr = nullptr;
   Return() : Stmt(NodeKind::Return) { }
+  ~Return() { delete expr; }
 };
 
 struct CompoundStmt : public Stmt {
   std::vector<Stmt*> stmts;
   CompoundStmt() : Stmt(NodeKind::CompoundStmt) { }
+  ~CompoundStmt() {
+    for (Stmt* s : stmts)
+      delete s;
+  }
 };
 
 struct BodyNode : public Node {
@@ -66,6 +83,9 @@ struct BodyNode : public Node {
   int beg_tok, end_tok;
   CompoundStmt* block = nullptr;
   BodyNode() : Node(NodeKind::Body) { }
+  ~BodyNode() {
+    delete block;
+  }
 };
 
 struct FunctionNode : public Node {
@@ -75,6 +95,9 @@ struct FunctionNode : public Node {
   ParamsNode* params = nullptr;
   BodyNode* body = nullptr;
   FunctionNode() : Node(NodeKind::Function) { }
+  ~FunctionNode() {
+    delete body;
+  }
 };
 
 struct ParserData {
@@ -165,6 +188,9 @@ private:
   Stmt* statement();
   Return* return_stmt();
   Expr* expression();
+  Expr* additive_expression();
+  Expr* multiplicative_expression();
+  Expr* primary_expression();
   bool pp_line();
 
   template<typename ...Args>

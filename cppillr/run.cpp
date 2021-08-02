@@ -22,6 +22,29 @@ static void run_node(
 {
   switch (n->kind) {
 
+    case NodeKind::BinExpr: {
+      auto be = static_cast<BinExpr*>(n);
+      run_node(be->lhs, p, vm);
+      run_node(be->rhs, p, vm);
+
+      if (vm.stack.size() >= 2) {
+        int x = vm.stack[vm.stack.size()-2];
+        int y = vm.stack[vm.stack.size()-1];
+
+        switch (be->op) {
+          case '+': x += y; break;
+          case '-': x -= y; break;
+          case '*': x *= y; break;
+          case '/': x /= y; break;
+          case '%': x %= y; break;
+        }
+
+        vm.stack.pop_back();
+        vm.stack.back() = x;
+      }
+      break;
+    }
+
     case NodeKind::Literal: {
       auto l = static_cast<Literal*>(n);
       vm.stack.push_back(l->value);
