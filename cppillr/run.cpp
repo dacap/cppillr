@@ -22,6 +22,22 @@ static void run_node(
 {
   switch (n->kind) {
 
+    case NodeKind::UnaryExpr: {
+      auto ue = static_cast<UnaryExpr*>(n);
+      run_node(ue->operand, p, vm);
+      if (!vm.stack.empty()) {
+        switch (ue->op) {
+          case '*': break; // TODO
+          case '&': break; // TODO
+          case '+': break;
+          case '-': vm.stack.back() = -vm.stack.back(); break;
+          case '!': vm.stack.back() = !vm.stack.back(); break;
+          case '~': vm.stack.back() = ~vm.stack.back(); break;
+        }
+      }
+      break;
+    }
+
     case NodeKind::BinExpr: {
       auto be = static_cast<BinExpr*>(n);
       run_node(be->lhs, p, vm);

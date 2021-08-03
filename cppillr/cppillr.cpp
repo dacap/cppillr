@@ -172,6 +172,13 @@ void show_ast_node(Node* n, int indent)
 
   switch (n->kind) {
 
+    case NodeKind::UnaryExpr: {
+      auto ue = static_cast<UnaryExpr*>(n);
+      std::printf("UnaryExpr %c\n", ue->op);
+      show_ast_node(ue->operand, indent+1);
+      break;
+    }
+
     case NodeKind::BinExpr: {
       auto be = static_cast<BinExpr*>(n);
       std::printf("BinExpr %c\n", be->op);

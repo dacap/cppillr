@@ -174,7 +174,8 @@ Lexer::Action Lexer::process()
         case '^':
         case '%':
         case '*':
-        case '!': {
+        case '!':
+        case '~': {
           int chr2 = reader.nextchar();
           if (chr2 == '=') {    // ^= %= *= !=
             add_token(TokenKind::Punctuator, reader.pos(), chr, chr2);

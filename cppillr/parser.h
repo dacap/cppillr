@@ -12,6 +12,7 @@ enum class NodeKind {
   ParamNode,
   ParamsNode,
   Expr,
+  UnaryExpr,
   BinExpr,
   Literal,
   Return,
@@ -40,6 +41,13 @@ struct ParamsNode : public Node {
 
 struct Expr : public Node {
   Expr(NodeKind kind = NodeKind::Expr) : Node(kind) { }
+};
+
+struct UnaryExpr : public Expr {
+  char op;
+  Expr* operand;
+  UnaryExpr() : Expr(NodeKind::UnaryExpr) { }
+  ~UnaryExpr() { delete operand; }
 };
 
 struct BinExpr : public Expr {

@@ -283,6 +283,20 @@ Expr* Parser::primary_expression()
     next_token();
     return e.release();
   }
+  else if (is_punctuator('*') ||
+           is_punctuator('&') ||
+           is_punctuator('+') ||
+           is_punctuator('-') ||
+           is_punctuator('!') ||
+           is_punctuator('~')) {
+    auto be = std::make_unique<UnaryExpr>();
+    be->op = tok->i;
+    next_token();
+    be->operand = primary_expression();
+    if (!be->operand)
+      error("expected primary expression after '-'");
+    return be.release();
+  }
   else if (is(TokenKind::NumericConstant)) {
     auto l = std::make_unique<Literal>();
     l->value = std::strtol(lex_data->id_text(*tok).c_str(), nullptr, 0);

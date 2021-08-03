@@ -36,3 +36,8 @@ expect_return_expr 10 5*2
 expect_return_expr 18 10+4*2
 expect_return_expr 7 "(10+4)/2"
 expect_return_expr 2 "32%10"
+expect_return_expr 0 "!1"
+expect_return_expr 1 "!0"
+expect_return_expr 1 "4+(-3)"
+expect_return_expr 3 "1+(- -2)"
+expect_return_expr 3 "-1-4+8"
